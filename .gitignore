@@ -1,0 +1,9 @@
+claude-usage-monitor
+data/
+.env
+.env.*
+!.env.example
+node_modules/
+*_templ.go
+*.log
+*.pid

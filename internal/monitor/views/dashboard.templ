@@ -1,0 +1,249 @@
+package views
+
+import (
+	"encoding/json"
+	"fmt"
+	"github.com/niski84/claude-usage-monitor/internal/types"
+)
+
+templ Dashboard(s types.Stats) {
+	@Layout("Dashboard") {
+		<div class="space-y-8">
+			<!-- Header -->
+			<div class="flex items-start justify-between">
+				<div>
+					<h1 class="text-2xl font-bold text-zinc-100">Usage Dashboard</h1>
+					<p class="mt-1 text-sm text-zinc-500">
+						Claude Code CLI token usage and cost estimates.
+						if !s.UpdatedAt.IsZero() {
+							Updated { s.UpdatedAt.Format("Jan 2, 15:04") }
+						}
+					</p>
+				</div>
+			</div>
+
+			<!-- Cost cards -->
+			<div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+				@costCard("Today", s.TodayCostUSD)
+				@costCard("This Week", s.WeekCostUSD)
+				@costCard("This Month", s.MonthCostUSD)
+				@costCard("All Time", s.TotalCostUSD)
+			</div>
+
+			<!-- Token + session stats -->
+			<div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+				@statCard("Input Tokens", fmtTokens(s.TotalInputTokens), "zinc")
+				@statCard("Output Tokens", fmtTokens(s.TotalOutputTokens), "violet")
+				@statCard("Cache Hit Rate", fmt.Sprintf("%.1f%%", s.CacheHitRate), "emerald")
+				@statCard("Sessions", fmt.Sprintf("%d total / %d today", s.Sessions, s.TodaySessions), "sky")
+			</div>
+
+			<!-- By model + by project -->
+			<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+				<!-- By Model -->
+				<div class="bg-zinc-900 rounded-xl border border-zinc-800 p-6">
+					<h2 class="text-sm font-semibold text-zinc-400 uppercase tracking-wider mb-4">Cost by Model</h2>
+					if len(s.ByModel) == 0 {
+						<p class="text-sm text-zinc-600">No data yet.</p>
+					} else {
+						<div class="space-y-3">
+							for _, m := range s.ByModel {
+								<div>
+									<div class="flex justify-between text-sm mb-1">
+										<span class="text-zinc-300 font-mono truncate">{ shortModel(m.Model) }</span>
+										<span class="text-violet-400 font-semibold ml-2 shrink-0">{ fmtCost(m.CostUSD) }</span>
+									</div>
+									<div class="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+										<div
+											class="h-full bg-violet-500 rounded-full"
+											style={ fmt.Sprintf("width:%.1f%%", m.Percent) }
+										></div>
+									</div>
+									<div class="text-xs text-zinc-600 mt-0.5">{ fmtTokens(m.Tokens) } tokens · { fmt.Sprintf("%.1f%%", m.Percent) }</div>
+								</div>
+							}
+						</div>
+					}
+				</div>
+
+				<!-- By Project -->
+				<div class="bg-zinc-900 rounded-xl border border-zinc-800 p-6">
+					<h2 class="text-sm font-semibold text-zinc-400 uppercase tracking-wider mb-4">Top Projects by Cost</h2>
+					if len(s.ByProject) == 0 {
+						<p class="text-sm text-zinc-600">No data yet.</p>
+					} else {
+						<div class="space-y-2">
+							for _, p := range s.ByProject {
+								<div class="flex items-center justify-between py-1.5 border-b border-zinc-800/50 last:border-0">
+									<div>
+										<span class="text-sm text-zinc-200 font-medium">{ p.Project }</span>
+										<span class="text-xs text-zinc-600 ml-2">{ fmt.Sprintf("%d sessions", p.Sessions) }</span>
+									</div>
+									<span class="text-sm text-violet-400 font-semibold">{ fmtCost(p.CostUSD) }</span>
+								</div>
+							}
+						</div>
+					}
+				</div>
+			</div>
+
+			<!-- Daily spend chart (last 30 days) -->
+			if len(s.DailyTotals) > 0 {
+				<div class="bg-zinc-900 rounded-xl border border-zinc-800 p-6">
+					<h2 class="text-sm font-semibold text-zinc-400 uppercase tracking-wider mb-4">Daily Spend — Last 30 Days</h2>
+					@dailyChart(s.DailyTotals)
+				</div>
+			}
+
+			<!-- Recent sessions -->
+			if len(s.RecentSessions) > 0 {
+				<div class="bg-zinc-900 rounded-xl border border-zinc-800 overflow-hidden">
+					<div class="px-6 py-4 border-b border-zinc-800">
+						<h2 class="text-sm font-semibold text-zinc-400 uppercase tracking-wider">Recent Sessions</h2>
+					</div>
+					<div class="overflow-x-auto">
+						<table class="min-w-full">
+							<thead>
+								<tr class="bg-zinc-800/40">
+									<th class="px-4 py-2 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">Project</th>
+									<th class="px-4 py-2 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">Model</th>
+									<th class="px-4 py-2 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider">Tokens</th>
+									<th class="px-4 py-2 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider">Cost</th>
+									<th class="px-4 py-2 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">When</th>
+								</tr>
+							</thead>
+							<tbody class="divide-y divide-zinc-800">
+								for _, sess := range s.RecentSessions {
+									<tr class="hover:bg-zinc-800/30 transition-colors">
+										<td class="px-4 py-2.5 text-sm text-zinc-200">{ sess.Project }</td>
+										<td class="px-4 py-2.5 text-xs font-mono text-zinc-400">{ shortModel(sess.Model) }</td>
+										<td class="px-4 py-2.5 text-sm text-right text-zinc-400">{ fmtTokens(sess.Tokens) }</td>
+										<td class="px-4 py-2.5 text-sm text-right font-semibold text-violet-400">{ fmtCost(sess.CostUSD) }</td>
+										<td class="px-4 py-2.5 text-xs text-zinc-600">{ sess.StartedRel }</td>
+									</tr>
+								}
+							</tbody>
+						</table>
+					</div>
+				</div>
+			}
+
+			<!-- Token breakdown detail -->
+			<div class="bg-zinc-900 rounded-xl border border-zinc-800 p-6">
+				<h2 class="text-sm font-semibold text-zinc-400 uppercase tracking-wider mb-4">Token Breakdown (All Time)</h2>
+				<div class="grid grid-cols-2 sm:grid-cols-4 gap-4 text-center">
+					@tokenDetail("Input", s.TotalInputTokens, "zinc-400")
+					@tokenDetail("Output", s.TotalOutputTokens, "violet-400")
+					@tokenDetail("Cache Writes", s.TotalCacheWrite, "amber-400")
+					@tokenDetail("Cache Reads", s.TotalCacheRead, "emerald-400")
+				</div>
+			</div>
+		</div>
+	}
+}
+
+templ costCard(label string, cost float64) {
+	<div class="bg-zinc-900 rounded-xl border border-zinc-800 p-5">
+		<p class="text-xs font-medium text-zinc-500 uppercase tracking-wider">{ label }</p>
+		<p class="mt-2 text-2xl font-bold text-violet-400">{ fmtCost(cost) }</p>
+	</div>
+}
+
+templ statCard(label, value, color string) {
+	<div class="bg-zinc-900 rounded-xl border border-zinc-800 p-5">
+		<p class="text-xs font-medium text-zinc-500 uppercase tracking-wider">{ label }</p>
+		<p class="mt-2 text-base font-semibold text-zinc-200">{ value }</p>
+	</div>
+}
+
+templ tokenDetail(label string, count int64, colorClass string) {
+	<div>
+		<p class="text-xs text-zinc-500 mb-1">{ label }</p>
+		<p class={ "text-xl font-bold text-" + colorClass }>{ fmtTokens(count) }</p>
+	</div>
+}
+
+templ dailyChart(days []types.DailyStat) {
+	<div
+		x-data={ fmt.Sprintf("dailyChart(%s)", dailyChartJSON(days)) }
+		x-init="draw()"
+		class="relative"
+	>
+		<canvas x-ref="canvas" class="w-full" style="height:120px"></canvas>
+	</div>
+	<script>
+	function dailyChart(days) {
+		return {
+			days,
+			draw() {
+				const canvas = this.$refs.canvas;
+				if (!canvas) return;
+				const dpr = window.devicePixelRatio || 1;
+				canvas.width = canvas.offsetWidth * dpr;
+				canvas.height = 120 * dpr;
+				const ctx = canvas.getContext('2d');
+				ctx.scale(dpr, dpr);
+				const W = canvas.offsetWidth, H = 120;
+				const maxCost = Math.max(...this.days.map(d => d.CostUSD), 0.0001);
+				const barW = Math.max(2, (W / this.days.length) - 2);
+				ctx.clearRect(0, 0, W, H);
+				this.days.forEach((d, i) => {
+					const barH = Math.max(2, (d.CostUSD / maxCost) * (H - 20));
+					const x = i * (W / this.days.length);
+					const y = H - barH - 4;
+					ctx.fillStyle = '#7c3aed';
+					ctx.beginPath();
+					ctx.roundRect(x + 1, y, barW, barH, 2);
+					ctx.fill();
+				});
+				// date labels: first and last
+				ctx.fillStyle = '#52525b';
+				ctx.font = '10px system-ui';
+				if (this.days.length > 0) {
+					ctx.fillText(this.days[0].Date.slice(5), 2, H);
+					const last = this.days[this.days.length - 1].Date.slice(5);
+					ctx.fillText(last, W - ctx.measureText(last).width - 2, H);
+				}
+			}
+		}
+	}
+	</script>
+}
+
+// ── helpers ──────────────────────────────────────────────────────────────────
+
+func fmtCost(c float64) string {
+	if c < 0.01 {
+		return fmt.Sprintf("$%.4f", c)
+	}
+	return fmt.Sprintf("$%.2f", c)
+}
+
+func fmtTokens(n int64) string {
+	if n >= 1_000_000 {
+		return fmt.Sprintf("%.1fM", float64(n)/1_000_000)
+	}
+	if n >= 1_000 {
+		return fmt.Sprintf("%.1fK", float64(n)/1_000)
+	}
+	return fmt.Sprintf("%d", n)
+}
+
+func shortModel(m string) string {
+	replacer := map[string]string{
+		"claude-sonnet-4-6": "sonnet-4.6",
+		"claude-opus-4-6":   "opus-4.6",
+		"claude-haiku-4-5":  "haiku-4.5",
+		"claude-3-5-sonnet-20241022": "sonnet-3.5",
+		"claude-3-5-haiku-20241022":  "haiku-3.5",
+	}
+	if s, ok := replacer[m]; ok {
+		return s
+	}
+	return m
+}
+
+func dailyChartJSON(days []types.DailyStat) string {
+	b, _ := json.Marshal(days)
+	return string(b)
+}
