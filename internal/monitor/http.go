@@ -41,6 +41,11 @@ func NewEcho(svc *Service) (*echo.Echo, error) {
 		return c.JSON(http.StatusOK, map[string]bool{"success": true})
 	})
 
+	e.POST("/api/refresh-limits", func(c echo.Context) error {
+		go svc.RefreshRateLimits()
+		return c.JSON(http.StatusOK, map[string]string{"status": "fetching"})
+	})
+
 	e.GET("/", func(c echo.Context) error {
 		return c.Redirect(http.StatusFound, "/dashboard")
 	})

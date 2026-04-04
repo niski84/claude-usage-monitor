@@ -18,9 +18,27 @@ type UsageRecord struct {
 	CostUSD          float64
 }
 
+// RateLimits holds live usage percentages fetched via a statusline probe.
+type RateLimits struct {
+	Available        bool
+	FiveHourPct      float64   // 0-100
+	FiveHourResetsAt time.Time
+	SevenDayPct      float64   // 0-100
+	SevenDayResetsAt time.Time
+}
+
+// AccountInfo holds plan/subscription data read from ~/.claude/.credentials.json.
+type AccountInfo struct {
+	Email            string
+	SubscriptionType string // "max", "pro", "free", etc.
+	RateLimitTier    string // e.g. "default_claude_max_20x"
+}
+
 // Stats is the aggregated dashboard data computed from all records.
 type Stats struct {
-	UpdatedAt time.Time
+	UpdatedAt   time.Time
+	AccountInfo AccountInfo
+	RateLimits  RateLimits
 
 	TotalCostUSD  float64
 	TodayCostUSD  float64

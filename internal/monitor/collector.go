@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/niski84/claude-usage-monitor/internal/types"
 )
 
 type rawEntry struct {
@@ -95,4 +97,28 @@ func projectName(cwd string) string {
 		return "unknown"
 	}
 	return filepath.Base(cwd)
+}
+
+type credentialsFile struct {
+	ClaudeAiOauth *struct {
+		SubscriptionType string `json:"subscriptionType"`
+		RateLimitTier    string `json:"rateLimitTier"`
+	} `json:"claudeAiOauth"`
+}
+
+// ReadAccountInfo reads plan/subscription data from ~/.claude/.credentials.json.
+func ReadAccountInfo(claudeDir string) types.AccountInfo {
+	path := filepath.Join(claudeDir, ".credentials.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return types.AccountInfo{}
+	}
+	var c credentialsFile
+	if err := json.Unmarshal(data, &c); err != nil || c.ClaudeAiOauth == nil {
+		return types.AccountInfo{}
+	}
+	return types.AccountInfo{
+		SubscriptionType: c.ClaudeAiOauth.SubscriptionType,
+		RateLimitTier:    c.ClaudeAiOauth.RateLimitTier,
+	}
 }

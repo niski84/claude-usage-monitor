@@ -3,6 +3,7 @@ package views
 import (
 	"encoding/json"
 	"fmt"
+	"time"
 	"github.com/niski84/claude-usage-monitor/internal/types"
 )
 
@@ -20,6 +21,41 @@ templ Dashboard(s types.Stats) {
 						}
 					</p>
 				</div>
+			</div>
+
+			<!-- Live rate limits -->
+			if s.RateLimits.Available {
+				<div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+					@rateLimitCard("Session (5h)", s.RateLimits.FiveHourPct, s.RateLimits.FiveHourResetsAt)
+					@rateLimitCard("Week (7d)", s.RateLimits.SevenDayPct, s.RateLimits.SevenDayResetsAt)
+				</div>
+			} else {
+				<div class="rounded-lg border border-zinc-800 bg-zinc-900/50 px-4 py-3 flex items-center justify-between">
+					<p class="text-sm text-zinc-500">Live usage limits not yet loaded</p>
+					<button
+						type="button"
+						@click="fetch('/api/refresh-limits',{method:'POST'}).then(()=>setTimeout(()=>location.reload(),12000))"
+						class="text-xs text-violet-400 hover:text-violet-300 border border-violet-800 hover:border-violet-600 rounded px-3 py-1 transition-colors"
+						x-data
+					>Fetch limits (~10s)</button>
+				</div>
+			}
+
+			<!-- Plan info + disclaimer -->
+			<div class="rounded-lg border border-zinc-800 bg-zinc-900 px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+				<div class="flex items-center gap-4 text-sm">
+					if s.AccountInfo.SubscriptionType != "" {
+						<span class="text-zinc-400">Plan: <span class="font-semibold text-violet-400 capitalize">{ s.AccountInfo.SubscriptionType }</span></span>
+					}
+					if s.AccountInfo.RateLimitTier != "" {
+						<span class="text-zinc-600">|</span>
+						<span class="text-zinc-400">Tier: <span class="font-mono text-zinc-300 text-xs">{ s.AccountInfo.RateLimitTier }</span></span>
+					}
+				</div>
+				<p class="text-xs text-amber-500/80">
+					Costs are <span class="font-semibold">API-equivalent estimates</span> — not actual billing on Max/Pro plans.
+					Live usage limits are only visible at claude.ai.
+				</p>
 			</div>
 
 			<!-- Cost cards -->
@@ -142,6 +178,24 @@ templ Dashboard(s types.Stats) {
 	}
 }
 
+templ rateLimitCard(label string, pct float64, resetsAt time.Time) {
+	<div class="bg-zinc-900 rounded-xl border border-zinc-800 p-5">
+		<p class="text-xs font-medium text-zinc-500 uppercase tracking-wider">{ label }</p>
+		<div class="mt-2 flex items-end justify-between">
+			<p class="text-2xl font-bold text-violet-400">{ fmt.Sprintf("%.0f%%", pct) } <span class="text-sm font-normal text-zinc-500">used</span></p>
+		</div>
+		<div class="mt-2 h-2 bg-zinc-800 rounded-full overflow-hidden">
+			<div
+				class={ "h-full rounded-full " + rateLimitColor(pct) }
+				style={ fmt.Sprintf("width:%.1f%%", pct) }
+			></div>
+		</div>
+		if !resetsAt.IsZero() {
+			<p class="mt-1 text-xs text-zinc-600">Resets { resetsAt.Local().Format("Jan 2, 15:04") }</p>
+		}
+	</div>
+}
+
 templ costCard(label string, cost float64) {
 	<div class="bg-zinc-900 rounded-xl border border-zinc-800 p-5">
 		<p class="text-xs font-medium text-zinc-500 uppercase tracking-wider">{ label }</p>
@@ -241,6 +295,16 @@ func shortModel(m string) string {
 		return s
 	}
 	return m
+}
+
+func rateLimitColor(pct float64) string {
+	if pct >= 80 {
+		return "bg-red-500"
+	}
+	if pct >= 50 {
+		return "bg-amber-500"
+	}
+	return "bg-violet-500"
 }
 
 func dailyChartJSON(days []types.DailyStat) string {
